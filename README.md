@@ -1,6 +1,6 @@
 # WhatsApp Gateway (Baileys + Express)
 
-Self-hosted, Green API-compatible WhatsApp gateway. Sessions are stored in Postgres
+Self-hosted, Green API-compatible WhatsApp gateway. Sessions are stored in Postgres (Supabase)
 so redeploys and restarts never require re-scanning the QR code.
 
 ## Endpoints
@@ -34,26 +34,22 @@ npm install
 npm run dev
 ```
 
-## Deploy
-See the deployment steps in the chat answer / below section "Koyeb".
+## Deploy on Render (+ Supabase)
 
-### Koyeb
-1. Push this folder to a GitHub repo.
-2. Create a free Postgres (Neon or Supabase) and copy its connection string.
-3. Koyeb → Create Service → GitHub → select repo → Builder: **Dockerfile**.
-4. Instance: **Free**. Port **8000** (HTTP). Health check path **/health**.
-5. Env vars: `INSTANCE_ID`, `API_TOKEN`, `DATABASE_URL`, `DEFAULT_COUNTRY_CODE`, `PORT=8000`.
-6. Deploy, then open `https://<app>.koyeb.app/qr?instance_id=…&api_token=…` and scan.
+1. Push this folder to GitHub. Render -> New -> **Web Service** -> Runtime **Docker**.
+2. Use an **always-on paid instance**. Free instances spin down after ~15 min without HTTP traffic,
+   which drops the WhatsApp socket on every sleep/wake.
+3. Health check path: `/health`. Env vars: `INSTANCE_ID`, `API_TOKEN`, `DATABASE_URL`,
+   `DEFAULT_COUNTRY_CODE`, `SESSION_ID`, `PORT=8000`.
+4. `DATABASE_URL`: Supabase -> Connect -> **Session pooler** string (port 5432). Render is IPv4-only and
+   Supabase's direct host is IPv6-only on most projects. The transaction pooler (6543) also works.
+5. Open `https://<app>.onrender.com/qr?instance_id=...&api_token=...` and scan.
+6. Optional: raise *Max Shutdown Delay* in Render settings to 30s+ so the final key flush always completes.
 
-### Keep it awake
-Koyeb's free instance sleeps after 1 hour without traffic. Ping `/health` every 5 min
-(UptimeRobot, or the Cloudflare Worker cron below).
+## How session persistence works
 
-```js
-// Cloudflare Worker with a Cron Trigger of */5 * * * *
-export default {
-  async scheduled(_event, env, ctx) {
-    ctx.waitUntil(fetch(env.GATEWAY_URL + '/health'));
-  },
-};
-```
+* `wa_auth` - creds + every Signal key (sessions, pre-keys, sender-keys, app-state keys), same row format as before.
+* `wa_session_lock` - lease so only ONE instance owns the socket (deploy overlap safe, writes are fenced by it).
+* `wa_messages` - sent messages for 3 days, used to answer retry receipts (`getMessage`).
+* All writes are serialized, retried, and committed before Baileys acks the message.
+* `POST /api/session/reset` logs out and wipes the session if you ever need a clean re-link.

@@ -53,3 +53,16 @@ npm run dev
 * `wa_messages` - sent messages for 3 days, used to answer retry receipts (`getMessage`).
 * All writes are serialized, retried, and committed before Baileys acks the message.
 * `POST /api/session/reset` logs out and wipes the session if you ever need a clean re-link.
+
+## Fixing "Waiting for this message" (v2 notes)
+
+* **Baileys is pinned to an exact version with a lockfile** (`npm ci`). The old `^6.7.9` silently resolved to the
+  6.7 *legacy* line, which has no LID mapping and no tctoken support. Do not loosen the pin.
+* **Heal already-diverged sessions without a QR scan**: set `SESSION_REPAIR_TAG` to any new value and redeploy
+  (runs once per value), or `POST /api/session/repair`. creds + pre-keys are kept, Signal sessions are rebuilt.
+* `BAILEYS_LOG_LEVEL=info` temporarily: look for `recv retry request` (healthy self-repair),
+  `recv retry request, but message not available` (getMessage miss) and `received error in ack` (e.g. 463).
+* Sends now fail loudly on server NACKs (463) instead of reporting `sent`, and wait up to `READY_WAIT_MS`
+  for the socket during reconnects / deploy hand-over.
+* Tests (real Postgres): `TEST_DATABASE_URL=postgres://... node --test test/store.test.mjs test/signal-e2e.test.mjs`
+* Do NOT set `shouldSyncHistoryMessage: () => false` on Baileys 7: it blocks the initial LID mappings.

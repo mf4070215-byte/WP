@@ -1,0 +1,21 @@
+{
+  "name": "wa-gateway",
+  "version": "1.0.0",
+  "description": "Self-hosted WhatsApp gateway (Green API-compatible) built on Baileys + Express",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --env-file=.env --watch src/index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "express": "^4.21.2",
+    "pg": "^8.13.1",
+    "pino": "^9.5.0",
+    "qrcode": "^1.5.4"
+  }
+}
